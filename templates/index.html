@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Coin Pozisyon Takip - Web</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  </head>
+  <body class="bg-light">
+    <div class="container py-4">
+      <h1 class="mb-4">Coin Pozisyon Takip (Web)</h1>
+
+      {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" class="card p-3 mb-4">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Coin</label>
+            <input class="form-control" name="coin" value="{{ form.coin }}" placeholder="BTCUSDT" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Alış Fiyatı</label>
+            <input class="form-control" name="entry_price" value="{{ form.entry_price }}" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Hedef 1</label>
+            <input class="form-control" name="target_price1" value="{{ form.target_price1 }}" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Hedef 2 (opsiyonel)</label>
+            <input class="form-control" name="target_price2" value="{{ form.target_price2 }}" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Stop Fiyat</label>
+            <input class="form-control" name="stop_price" value="{{ form.stop_price }}" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Kaldıraç</label>
+            <input class="form-control" name="leverage" value="{{ form.leverage }}" />
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Açılış Tarihi (YYYY-MM-DD HH:MM - Türkiye)</label>
+            <input class="form-control" name="open_date" value="{{ form.open_date }}" />
+          </div>
+        </div>
+        <div class="mt-3">
+          <button class="btn btn-primary" type="submit">Kontrol Et</button>
+        </div>
+      </form>
+
+      {% if live_status %}
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="fw-bold" style="color: {{ live_status.color }};">{{ live_status.text }}</div>
+      </div>
+      {% endif %}
+
+      {% if result %}
+      <div class="card p-3 mb-3">
+        <div class="h5 mb-2" style="color: {{ result.color }};">{{ result.title }}</div>
+        <div>{{ result.detail }}</div>
+      </div>
+      {% endif %}
+
+      {% if chart_data_url %}
+      <div class="card p-3">
+        <img class="img-fluid" src="{{ chart_data_url }}" alt="Chart" />
+      </div>
+      {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+  </html>
+
+

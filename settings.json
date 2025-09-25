@@ -1,0 +1,15 @@
+{
+  "coin": "AVAXUSDT",
+  "entry_price": "31.35",
+  "target_price1": "31.18",
+  "target_price2": "31.06",
+  "stop_price": "31.46",
+  "leverage": "20",
+  "open_date": "2025-09-25 09:08",
+  "window": {
+    "width": 1243,
+    "height": 879,
+    "x": 345,
+    "y": 77
+  }
+}
