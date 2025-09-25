@@ -5,73 +5,176 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Coin Pozisyon Takip - Web</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+      .saved-positions {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .position-item {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      .position-item:hover {
+        background: #e9ecef;
+      }
+      .position-item.active {
+        background: #d1ecf1;
+        border-color: #17a2b8;
+      }
+      .position-meta {
+        font-size: 0.875rem;
+        color: #6c757d;
+      }
+      .delete-btn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+      }
+    </style>
   </head>
   <body class="bg-light">
-    <div class="container py-4">
-      <h1 class="mb-4">Coin Pozisyon Takip (Web)</h1>
-
-      {% if error %}
-      <div class="alert alert-danger">{{ error }}</div>
-      {% endif %}
-
-      <form method="post" class="card p-3 mb-4">
-        <div class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">Coin</label>
-            <input class="form-control" name="coin" value="{{ form.coin }}" placeholder="BTCUSDT" />
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Alış Fiyatı</label>
-            <input class="form-control" name="entry_price" value="{{ form.entry_price }}" />
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Hedef 1</label>
-            <input class="form-control" name="target_price1" value="{{ form.target_price1 }}" />
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Hedef 2 (opsiyonel)</label>
-            <input class="form-control" name="target_price2" value="{{ form.target_price2 }}" />
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Stop Fiyat</label>
-            <input class="form-control" name="stop_price" value="{{ form.stop_price }}" />
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Kaldıraç</label>
-            <input class="form-control" name="leverage" value="{{ form.leverage }}" />
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Açılış Tarihi (YYYY-MM-DD HH:MM - Türkiye)</label>
-            <input class="form-control" name="open_date" value="{{ form.open_date }}" />
+    <div class="container-fluid py-4">
+      <div class="row">
+        <!-- Sol Panel - Kaydedilen Pozisyonlar -->
+        <div class="col-md-3">
+          <div class="card">
+            <div class="card-header">
+              <h6 class="mb-0">Kaydedilen Pozisyonlar</h6>
+            </div>
+            <div class="card-body p-2">
+              <div class="saved-positions">
+                {% if saved_positions %}
+                  {% for position in saved_positions %}
+                  <div class="position-item" onclick="loadPosition({{ position.id }})">
+                    <div class="d-flex justify-content-between align-items-start">
+                      <div class="flex-grow-1">
+                        <div class="fw-bold">{{ position.coin }}</div>
+                        <div class="position-meta">
+                          Giriş: {{ "%.2f"|format(position.entry_price) }}<br>
+                          Hedef: {{ "%.2f"|format(position.target_price1) }}
+                          {% if position.target_price2 %} / {{ "%.2f"|format(position.target_price2) }}{% endif %}<br>
+                          Stop: {{ "%.2f"|format(position.stop_price) }}<br>
+                          <small class="text-muted">{{ position.saved_at }}</small>
+                        </div>
+                      </div>
+                      <button type="button" class="btn btn-outline-danger btn-sm delete-btn" 
+                              onclick="event.stopPropagation(); deletePosition({{ position.id }})"
+                              title="Sil">
+                        ×
+                      </button>
+                    </div>
+                  </div>
+                  {% endfor %}
+                {% else %}
+                  <div class="text-muted text-center py-3">
+                    <small>Henüz kaydedilen pozisyon yok</small>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
           </div>
         </div>
-        <div class="mt-3">
-          <button class="btn btn-primary" type="submit">Kontrol Et</button>
+
+        <!-- Sağ Panel - Ana İçerik -->
+        <div class="col-md-9">
+          <h1 class="mb-4">Coin Pozisyon Takip (Web)</h1>
+
+          {% if error %}
+          <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+
+          {% if success_message %}
+          <div class="alert alert-success">{{ success_message }}</div>
+          {% endif %}
+
+          <form method="post" class="card p-3 mb-4">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Coin</label>
+                <input class="form-control" name="coin" value="{{ form.coin }}" placeholder="BTCUSDT" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Alış Fiyatı</label>
+                <input class="form-control" name="entry_price" value="{{ form.entry_price }}" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Hedef 1</label>
+                <input class="form-control" name="target_price1" value="{{ form.target_price1 }}" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Hedef 2 (opsiyonel)</label>
+                <input class="form-control" name="target_price2" value="{{ form.target_price2 }}" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Stop Fiyat</label>
+                <input class="form-control" name="stop_price" value="{{ form.stop_price }}" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Kaldıraç</label>
+                <input class="form-control" name="leverage" value="{{ form.leverage }}" />
+              </div>
+              <div class="col-md-12">
+                <label class="form-label">Açılış Tarihi (YYYY-MM-DD HH:MM - Türkiye)</label>
+                <input class="form-control" name="open_date" value="{{ form.open_date }}" />
+              </div>
+            </div>
+            <div class="mt-3">
+              <button class="btn btn-primary me-2" type="submit" name="action" value="check">Kontrol Et</button>
+              <button class="btn btn-success" type="submit" name="action" value="save">Kaydet</button>
+            </div>
+          </form>
+
+          {% if live_status %}
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="fw-bold" style="color: {{ live_status.color }};">{{ live_status.text }}</div>
+          </div>
+          {% endif %}
+
+          {% if result %}
+          <div class="card p-3 mb-3">
+            <div class="h5 mb-2" style="color: {{ result.color }};">{{ result.title }}</div>
+            <div>{{ result.detail }}</div>
+          </div>
+          {% endif %}
+
+          {% if chart_data_url %}
+          <div class="card p-3">
+            <img class="img-fluid" src="{{ chart_data_url }}" alt="Chart" />
+          </div>
+          {% endif %}
         </div>
-      </form>
-
-      {% if live_status %}
-      <div class="d-flex justify-content-between align-items-center mb-3">
-        <div class="fw-bold" style="color: {{ live_status.color }};">{{ live_status.text }}</div>
       </div>
-      {% endif %}
-
-      {% if result %}
-      <div class="card p-3 mb-3">
-        <div class="h5 mb-2" style="color: {{ result.color }};">{{ result.title }}</div>
-        <div>{{ result.detail }}</div>
-      </div>
-      {% endif %}
-
-      {% if chart_data_url %}
-      <div class="card p-3">
-        <img class="img-fluid" src="{{ chart_data_url }}" alt="Chart" />
-      </div>
-      {% endif %}
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      function loadPosition(positionId) {
+        // Remove active class from all items
+        document.querySelectorAll('.position-item').forEach(item => {
+          item.classList.remove('active');
+        });
+        
+        // Add active class to clicked item
+        event.currentTarget.classList.add('active');
+        
+        // Redirect to load the position
+        window.location.href = '/?load=' + positionId;
+      }
+
+      function deletePosition(positionId) {
+        if (confirm('Bu pozisyonu silmek istediğinizden emin misiniz?')) {
+          // Create a form and submit it
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = '/delete_position/' + positionId;
+          document.body.appendChild(form);
+          form.submit();
+        }
+      }
+    </script>
   </body>
-  </html>
-
-
+</html>
