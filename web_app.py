@@ -5,14 +5,13 @@ from datetime import datetime, timezone
 
 import requests
 import pytz
-from flask import Flask, render_template, request, redirect, url_for
-from matplotlib.figure import Figure
-
+from flask import Flask, render_template, request, redirect, url_for, jsonify
 
 app = Flask(__name__)
 
 LOCAL_TZ = pytz.timezone('Europe/Istanbul')
 SETTINGS_PATH = 'web_settings.json'
+SAVED_POSITIONS_PATH = 'saved_positions.json'
 
 
 def load_settings():
@@ -34,6 +33,43 @@ def save_settings(data):
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
         pass
+
+
+def load_saved_positions():
+    try:
+        with open(SAVED_POSITIONS_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+    except FileNotFoundError:
+        return []
+    except Exception:
+        return []
+    return []
+
+
+def save_positions(positions):
+    try:
+        with open(SAVED_POSITIONS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(positions, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+
+def add_position(position_data):
+    positions = load_saved_positions()
+    # Add timestamp and unique ID
+    position_data['saved_at'] = datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
+    position_data['id'] = len(positions) + 1
+    positions.append(position_data)
+    return save_positions(positions)
+
+
+def delete_position(position_id):
+    positions = load_saved_positions()
+    positions = [p for p in positions if p.get('id') != position_id]
+    return save_positions(positions)
 
 
 def get_binance_klines(symbol: str, start_time: datetime, end_time: datetime):
@@ -180,6 +216,8 @@ def evaluate_position(klines, entry_price, target1, target2, stop_price, leverag
 
 
 def render_chart(klines, entry_price, target1, target2, stop_price, position_type):
+    from matplotlib.figure import Figure
+    
     fig = Figure(figsize=(10, 3.5), dpi=100)
     ax = fig.add_subplot(111)
 
@@ -222,6 +260,27 @@ def render_chart(klines, entry_price, target1, target2, stop_price, position_typ
 @app.route('/', methods=['GET', 'POST'])
 def index():
     defaults = load_settings()
+    saved_positions = load_saved_positions()
+    
+    # Check if loading from saved position
+    load_position_id = request.args.get('load')
+    if load_position_id:
+        try:
+            position_id = int(load_position_id)
+            position = next((p for p in saved_positions if p.get('id') == position_id), None)
+            if position:
+                defaults = {
+                    'coin': position.get('coin', ''),
+                    'entry_price': str(position.get('entry_price', '')),
+                    'target_price1': str(position.get('target_price1', '')),
+                    'target_price2': str(position.get('target_price2', '')),
+                    'stop_price': str(position.get('stop_price', '')),
+                    'leverage': str(position.get('leverage', '')),
+                    'open_date': position.get('open_date', ''),
+                }
+        except (ValueError, TypeError):
+            pass
+    
     context = {
         'form': {
             'coin': defaults.get('coin', 'BTCUSDT'),
@@ -236,9 +295,13 @@ def index():
         'chart_data_url': None,
         'live_status': None,
         'error': None,
+        'success_message': None,
+        'saved_positions': saved_positions,
     }
 
     if request.method == 'POST':
+        action = request.form.get('action', 'check')
+        
         try:
             coin = request.form.get('coin', '').strip().upper()
             entry_price = float(request.form.get('entry_price', '0'))
@@ -252,62 +315,84 @@ def index():
             if not coin or entry_price <= 0 or target1 <= 0 or (target2 is not None and target2 <= 0) or stop_price <= 0 or leverage <= 0:
                 raise ValueError('Lütfen tüm zorunlu alanları geçerli değerlerle doldurun.')
 
-            naive = datetime.strptime(open_date_str, '%Y-%m-%d %H:%M')
-            open_date_local = LOCAL_TZ.localize(naive)
-            open_date_utc = open_date_local.astimezone(timezone.utc)
-            now_utc = datetime.now(LOCAL_TZ).astimezone(timezone.utc)
-
-            klines = get_binance_klines(coin, open_date_utc, now_utc)
-            position_type = determine_position_type(entry_price, target1)
-            eval_res = evaluate_position(klines, entry_price, target1, target2, stop_price, leverage, position_type, LOCAL_TZ)
-
-            # Live status (always)
-            last_close = eval_res['last_close']
-            live_pnl, live_status = calculate_profit_loss(entry_price, target1, stop_price, leverage, last_close, 'open', position_type)
-            live_color = 'green' if live_pnl > 0 else ('red' if live_pnl < 0 else 'black')
-            context['live_status'] = {
-                'text': f"Güncel: {live_status} %{'{:.2f}'.format(live_pnl)} | Fiyat: {'{:.2f}'.format(last_close)}",
-                'color': live_color,
-            }
-
-            # Outcome
-            if eval_res['stop_hit'] and eval_res['stop_before_any_target']:
-                pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, eval_res['stop_hit_price'], 'stop', position_type)
-                context['result'] = {
-                    'title': f"❌ {position_type.upper()} pozisyon {eval_res['stop_time'].strftime('%Y-%m-%d %H:%M')} tarihinde stop oldu ({status}).",
-                    'detail': f"{status}: %{'{:.2f}'.format(pnl)} (Stop: {'{:.2f}'.format(stop_price)}, Ulaşılan: {'{:.2f}'.format(eval_res['stop_hit_price'])}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)",
-                    'color': 'red',
+            if action == 'save':
+                # Save position
+                position_data = {
+                    'coin': coin,
+                    'entry_price': entry_price,
+                    'target_price1': target1,
+                    'target_price2': target2,
+                    'stop_price': stop_price,
+                    'leverage': leverage,
+                    'open_date': open_date_str,
+                    'name': f"{coin} - {datetime.now(LOCAL_TZ).strftime('%m/%d %H:%M')}"
                 }
-            elif eval_res['target2_hit']:
-                pnl, status = calculate_profit_loss(entry_price, target2, stop_price, leverage, eval_res['target2_price'], 'target', position_type)
-                context['result'] = {
-                    'title': f"✅ {position_type.upper()} pozisyon {eval_res['target2_time'].strftime('%Y-%m-%d %H:%M')} tarihinde Hedef 2'ye ulaştı ({status}).",
-                    'detail': f"{status}: %{'{:.2f}'.format(pnl)} (Hedef 2: {'{:.2f}'.format(target2)}, Ulaşılan: {'{:.2f}'.format(eval_res['target2_price'])}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)",
-                    'color': 'green',
-                }
-            elif eval_res['target1_hit']:
-                pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, eval_res['target1_price'], 'target', position_type)
-                context['result'] = {
-                    'title': f"✅ {position_type.upper()} pozisyon {eval_res['target1_time'].strftime('%Y-%m-%d %H:%M')} tarihinde Hedef 1'e ulaştı ({status}).",
-                    'detail': f"{status}: %{'{:.2f}'.format(pnl)} (Hedef 1: {'{:.2f}'.format(target1)}, Ulaşılan: {'{:.2f}'.format(eval_res['target1_price'])}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)",
-                    'color': 'green',
-                }
-            else:
-                pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, last_close, 'open', position_type)
-                if target2 is not None:
-                    detail = f"{status}: %{'{:.2f}'.format(pnl)} (Hedef 1: {'{:.2f}'.format(target1)}, Hedef 2: {'{:.2f}'.format(target2)}, Stop: {'{:.2f}'.format(stop_price)}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)"
+                
+                if add_position(position_data):
+                    context['success_message'] = f"{coin} pozisyonu başarıyla kaydedildi!"
+                    # Reload saved positions
+                    context['saved_positions'] = load_saved_positions()
                 else:
-                    detail = f"{status}: %{'{:.2f}'.format(pnl)} (Hedef: {'{:.2f}'.format(target1)}, Stop: {'{:.2f}'.format(stop_price)}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)"
-                context['result'] = {
-                    'title': f"⏳ {position_type.upper()} pozisyon açık. Hedefe ulaşmadı. Şu anki fiyat: {'{:.2f}'.format(last_close)}",
-                    'detail': detail,
-                    'color': 'green' if pnl > 0 else ('red' if pnl < 0 else 'black'),
+                    context['error'] = "Pozisyon kaydetme sırasında bir hata oluştu."
+            
+            elif action == 'check':
+                # Check position (existing logic)
+                naive = datetime.strptime(open_date_str, '%Y-%m-%d %H:%M')
+                open_date_local = LOCAL_TZ.localize(naive)
+                open_date_utc = open_date_local.astimezone(timezone.utc)
+                now_utc = datetime.now(LOCAL_TZ).astimezone(timezone.utc)
+
+                klines = get_binance_klines(coin, open_date_utc, now_utc)
+                position_type = determine_position_type(entry_price, target1)
+                eval_res = evaluate_position(klines, entry_price, target1, target2, stop_price, leverage, position_type, LOCAL_TZ)
+
+                # Live status (always)
+                last_close = eval_res['last_close']
+                live_pnl, live_status = calculate_profit_loss(entry_price, target1, stop_price, leverage, last_close, 'open', position_type)
+                live_color = 'green' if live_pnl > 0 else ('red' if live_pnl < 0 else 'black')
+                context['live_status'] = {
+                    'text': f"Güncel: {live_status} %{'{:.2f}'.format(live_pnl)} | Fiyat: {'{:.2f}'.format(last_close)}",
+                    'color': live_color,
                 }
 
-            # Chart
-            context['chart_data_url'] = render_chart(klines, entry_price, target1, target2, stop_price, position_type)
+                # Outcome
+                if eval_res['stop_hit'] and eval_res['stop_before_any_target']:
+                    pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, eval_res['stop_hit_price'], 'stop', position_type)
+                    context['result'] = {
+                        'title': f"❌ {position_type.upper()} pozisyon {eval_res['stop_time'].strftime('%Y-%m-%d %H:%M')} tarihinde stop oldu ({status}).",
+                        'detail': f"{status}: %{'{:.2f}'.format(pnl)} (Stop: {'{:.2f}'.format(stop_price)}, Ulaşılan: {'{:.2f}'.format(eval_res['stop_hit_price'])}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)",
+                        'color': 'red',
+                    }
+                elif eval_res['target2_hit']:
+                    pnl, status = calculate_profit_loss(entry_price, target2, stop_price, leverage, eval_res['target2_price'], 'target', position_type)
+                    context['result'] = {
+                        'title': f"✅ {position_type.upper()} pozisyon {eval_res['target2_time'].strftime('%Y-%m-%d %H:%M')} tarihinde Hedef 2'ye ulaştı ({status}).",
+                        'detail': f"{status}: %{'{:.2f}'.format(pnl)} (Hedef 2: {'{:.2f}'.format(target2)}, Ulaşılan: {'{:.2f}'.format(eval_res['target2_price'])}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)",
+                        'color': 'green',
+                    }
+                elif eval_res['target1_hit']:
+                    pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, eval_res['target1_price'], 'target', position_type)
+                    context['result'] = {
+                        'title': f"✅ {position_type.upper()} pozisyon {eval_res['target1_time'].strftime('%Y-%m-%d %H:%M')} tarihinde Hedef 1'e ulaştı ({status}).",
+                        'detail': f"{status}: %{'{:.2f}'.format(pnl)} (Hedef 1: {'{:.2f}'.format(target1)}, Ulaşılan: {'{:.2f}'.format(eval_res['target1_price'])}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)",
+                        'color': 'green',
+                    }
+                else:
+                    pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, last_close, 'open', position_type)
+                    if target2 is not None:
+                        detail = f"{status}: %{'{:.2f}'.format(pnl)} (Hedef 1: {'{:.2f}'.format(target1)}, Hedef 2: {'{:.2f}'.format(target2)}, Stop: {'{:.2f}'.format(stop_price)}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)"
+                    else:
+                        detail = f"{status}: %{'{:.2f}'.format(pnl)} (Hedef: {'{:.2f}'.format(target1)}, Stop: {'{:.2f}'.format(stop_price)}, Kaldıraç: {int(leverage) if float(leverage).is_integer() else leverage}x)"
+                    context['result'] = {
+                        'title': f"⏳ {position_type.upper()} pozisyon açık. Hedefe ulaşmadı. Şu anki fiyat: {'{:.2f}'.format(last_close)}",
+                        'detail': detail,
+                        'color': 'green' if pnl > 0 else ('red' if pnl < 0 else 'black'),
+                    }
 
-            # Persist inputs
+                # Chart
+                context['chart_data_url'] = render_chart(klines, entry_price, target1, target2, stop_price, position_type)
+
+            # Persist inputs for both check and save actions
             save_settings({
                 'coin': coin,
                 'entry_price': request.form.get('entry_price', ''),
@@ -335,7 +420,13 @@ def index():
     return render_template('index.html', **context)
 
 
+@app.route('/delete_position/<int:position_id>', methods=['POST'])
+def delete_position_route(position_id):
+    if delete_position(position_id):
+        return redirect(url_for('index'))
+    else:
+        return redirect(url_for('index') + '?error=delete_failed')
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
-
-
