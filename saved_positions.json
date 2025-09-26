@@ -1,0 +1,38 @@
+[
+  {
+    "coin": "AVAXUSDT",
+    "entry_price": 31.05,
+    "target_price1": 30.24,
+    "target_price2": 29.68,
+    "stop_price": 31.58,
+    "leverage": 20.0,
+    "open_date": "2025-09-25 07:55",
+    "name": "AVAXUSDT - 09/25 16:09",
+    "saved_at": "2025-09-25 16:09:51",
+    "id": 1
+  },
+  {
+    "coin": "AAVEUSDT",
+    "entry_price": 267.0,
+    "target_price1": 263.0,
+    "target_price2": 260.0,
+    "stop_price": 282.0,
+    "leverage": 19.0,
+    "open_date": "2025-09-25 15:07",
+    "name": "AAVEUSDT - 09/25 16:10",
+    "saved_at": "2025-09-25 16:10:40",
+    "id": 2
+  },
+  {
+    "coin": "BTCUSDT",
+    "entry_price": 111556.0,
+    "target_price1": 111126.0,
+    "target_price2": 110833.0,
+    "stop_price": 111841.0,
+    "leverage": 20.0,
+    "open_date": "2025-09-25 16:23",
+    "name": "BTCUSDT - 09/25 16:25",
+    "saved_at": "2025-09-25 16:25:14",
+    "id": 3
+  }
+]
