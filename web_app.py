@@ -86,7 +86,7 @@ def save_positions(positions):
 def add_position(position_data):
     positions = load_saved_positions()
     position_data['saved_at'] = datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
-    position_data['id'] = len(positions) + 1
+    position_data['id'] = max((p.get('id', 0) for p in positions), default=0) + 1
     position_data.setdefault('status', 'open')
     position_data.setdefault('amount', 0)
     positions.append(position_data)
