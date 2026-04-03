@@ -24,6 +24,17 @@ CLOSE_REASON_LABELS = {
 }
 
 
+def trf(value, decimals=4):
+    """Sayıyı Türkçe ondalık ayracıyla (virgül) formatlar."""
+    try:
+        return f"{float(value):.{decimals}f}".replace('.', ',')
+    except (ValueError, TypeError):
+        return str(value)
+
+
+app.jinja_env.filters['trf'] = trf
+
+
 def load_settings():
     try:
         with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
@@ -300,7 +311,7 @@ def _dollar_str(amount, pnl_percent):
         return ''
     pnl_dollar = amount * (pnl_percent / 100)
     sign = '+' if pnl_dollar >= 0 else ''
-    return f' | {sign}${pnl_dollar:.2f}'
+    return f' | {sign}${trf(pnl_dollar, 2)}'
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -408,7 +419,7 @@ def index():
 
                 live_dollar = _dollar_str(amount, live_pnl)
                 context['live_status'] = {
-                    'text': f"Güncel: {live_status_text} %{live_pnl:.2f}{live_dollar} | Fiyat: {current_price:.2f}",
+                    'text': f"Güncel: {live_status_text} %{trf(live_pnl, 2)}{live_dollar} | Fiyat: {trf(current_price, 2)}",
                     'color': live_color,
                 }
 
@@ -421,7 +432,7 @@ def index():
                     dollar = _dollar_str(amount, pnl)
                     context['result'] = {
                         'title': f"❌ {position_type.upper()} pozisyon {eval_res['stop_time'].strftime('%Y-%m-%d %H:%M')} tarihinde stop oldu ({status}).",
-                        'detail': f"{status}: %{pnl:.2f}{dollar} (Stop: {stop_price:.2f}, Ulaşılan: {eval_res['stop_hit_price']:.2f}, Kaldıraç: {lev_str})",
+                        'detail': f"{status}: %{trf(pnl, 2)}{dollar} (Stop: {trf(stop_price)}, Ulaşılan: {trf(eval_res['stop_hit_price'])}, Kaldıraç: {lev_str})",
                         'color': 'red',
                     }
                     auto_close_price = eval_res['stop_hit_price']
@@ -433,7 +444,7 @@ def index():
                     dollar = _dollar_str(amount, pnl)
                     context['result'] = {
                         'title': f"✅ {position_type.upper()} pozisyon {eval_res['target2_time'].strftime('%Y-%m-%d %H:%M')} tarihinde Hedef 2'ye ulaştı ({status}).",
-                        'detail': f"{status}: %{pnl:.2f}{dollar} (Hedef 2: {target2:.2f}, Ulaşılan: {eval_res['target2_price']:.2f}, Kaldıraç: {lev_str})",
+                        'detail': f"{status}: %{trf(pnl, 2)}{dollar} (Hedef 2: {trf(target2)}, Ulaşılan: {trf(eval_res['target2_price'])}, Kaldıraç: {lev_str})",
                         'color': 'green',
                     }
                     auto_close_price = eval_res['target2_price']
@@ -445,7 +456,7 @@ def index():
                     dollar = _dollar_str(amount, pnl)
                     context['result'] = {
                         'title': f"✅ {position_type.upper()} pozisyon {eval_res['target1_time'].strftime('%Y-%m-%d %H:%M')} tarihinde Hedef 1'e ulaştı ({status}).",
-                        'detail': f"{status}: %{pnl:.2f}{dollar} (Hedef 1: {target1:.2f}, Ulaşılan: {eval_res['target1_price']:.2f}, Kaldıraç: {lev_str})",
+                        'detail': f"{status}: %{trf(pnl, 2)}{dollar} (Hedef 1: {trf(target1)}, Ulaşılan: {trf(eval_res['target1_price'])}, Kaldıraç: {lev_str})",
                         'color': 'green',
                     }
                     auto_close_price = eval_res['target1_price']
@@ -456,11 +467,11 @@ def index():
                     pnl, status = calculate_profit_loss(entry_price, target1, stop_price, leverage, last_close, 'open', position_type)
                     dollar = _dollar_str(amount, pnl)
                     if target2 is not None:
-                        detail = f"{status}: %{pnl:.2f}{dollar} (Hedef 1: {target1:.2f}, Hedef 2: {target2:.2f}, Stop: {stop_price:.2f}, Kaldıraç: {lev_str})"
+                        detail = f"{status}: %{trf(pnl, 2)}{dollar} (Hedef 1: {trf(target1)}, Hedef 2: {trf(target2)}, Stop: {trf(stop_price)}, Kaldıraç: {lev_str})"
                     else:
-                        detail = f"{status}: %{pnl:.2f}{dollar} (Hedef: {target1:.2f}, Stop: {stop_price:.2f}, Kaldıraç: {lev_str})"
+                        detail = f"{status}: %{trf(pnl, 2)}{dollar} (Hedef: {trf(target1)}, Stop: {trf(stop_price)}, Kaldıraç: {lev_str})"
                     context['result'] = {
-                        'title': f"⏳ {position_type.upper()} pozisyon açık. Hedefe ulaşmadı. Şu anki fiyat: {last_close:.2f}",
+                        'title': f"⏳ {position_type.upper()} pozisyon açık. Hedefe ulaşmadı. Şu anki fiyat: {trf(current_price, 2)}",
                         'detail': detail,
                         'color': 'green' if pnl > 0 else ('red' if pnl < 0 else 'black'),
                     }
@@ -543,6 +554,59 @@ def close_position_route(position_id):
         update_position_close(position_id, close_price, close_reason, pnl_percent, pnl_dollar)
     except Exception as e:
         print(f'[ERROR] close_position_route: {e}')
+
+    return redirect(url_for('index'))
+
+
+@app.route('/refresh_all', methods=['POST'])
+def refresh_all():
+    positions = load_saved_positions()
+    for position in positions:
+        if position.get('status', 'open') != 'open':
+            continue
+        try:
+            coin = position['coin']
+            entry_price = float(position['entry_price'])
+            target1 = float(position['target_price1'])
+            target2_val = position.get('target_price2')
+            target2 = float(target2_val) if target2_val else None
+            stop_price = float(position['stop_price'])
+            leverage = float(position['leverage'])
+            amount = float(position.get('amount') or 0)
+            open_date_str = position['open_date']
+
+            naive = datetime.strptime(open_date_str, '%Y-%m-%d %H:%M')
+            open_date_local = LOCAL_TZ.localize(naive)
+            open_date_utc = open_date_local.astimezone(timezone.utc)
+            now_utc = datetime.now(LOCAL_TZ).astimezone(timezone.utc)
+
+            klines = get_binance_klines(coin, open_date_utc, now_utc)
+            position_type = determine_position_type(entry_price, target1)
+            eval_res = evaluate_position(klines, entry_price, target1, target2, stop_price, leverage, position_type, LOCAL_TZ)
+
+            auto_close_price = None
+            auto_close_reason = None
+            auto_close_pnl = None
+
+            if eval_res['stop_hit'] and eval_res['stop_before_any_target']:
+                auto_close_price = eval_res['stop_hit_price']
+                auto_close_reason = 'stop_oto'
+                auto_close_pnl, _ = calculate_profit_loss(entry_price, target1, stop_price, leverage, auto_close_price, 'stop', position_type)
+            elif eval_res['target2_hit']:
+                auto_close_price = eval_res['target2_price']
+                auto_close_reason = 'hedef2_oto'
+                auto_close_pnl, _ = calculate_profit_loss(entry_price, target2, stop_price, leverage, auto_close_price, 'target', position_type)
+            elif eval_res['target1_hit']:
+                auto_close_price = eval_res['target1_price']
+                auto_close_reason = 'hedef1_oto'
+                auto_close_pnl, _ = calculate_profit_loss(entry_price, target1, stop_price, leverage, auto_close_price, 'target', position_type)
+
+            if auto_close_price is not None:
+                pnl_dollar = amount * (auto_close_pnl / 100) if amount else None
+                update_position_close(position['id'], auto_close_price, auto_close_reason, auto_close_pnl, pnl_dollar)
+
+        except Exception as e:
+            print(f"[ERROR] refresh_all {position.get('coin')}: {e}")
 
     return redirect(url_for('index'))
 
