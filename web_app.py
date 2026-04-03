@@ -35,7 +35,11 @@ def trf(value, decimals=4):
 app.jinja_env.filters['trf'] = trf
 
 
-def load_settings():
+def parse_float(s):
+    """Virgül veya nokta ondalık ayracını kabul eder."""
+    return float(str(s).strip().replace(',', '.'))
+
+
     try:
         with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -366,15 +370,15 @@ def index():
 
         try:
             coin = request.form.get('coin', '').strip().upper()
-            entry_price = float(request.form.get('entry_price', '0'))
-            target1 = float(request.form.get('target_price1', '0'))
+            entry_price = parse_float(request.form.get('entry_price', '0'))
+            target1 = parse_float(request.form.get('target_price1', '0'))
             target2_str = request.form.get('target_price2', '').strip()
-            target2 = float(target2_str) if target2_str else None
-            stop_price = float(request.form.get('stop_price', '0'))
-            leverage = float(request.form.get('leverage', '0'))
+            target2 = parse_float(target2_str) if target2_str else None
+            stop_price = parse_float(request.form.get('stop_price', '0'))
+            leverage = parse_float(request.form.get('leverage', '0'))
             open_date_str = request.form.get('open_date', '').strip()
             amount_str = request.form.get('amount', '').strip()
-            amount = float(amount_str) if amount_str else 0.0
+            amount = parse_float(amount_str) if amount_str else 0.0
             position_id_str = request.form.get('position_id', '').strip()
             position_id_for_update = int(position_id_str) if position_id_str else None
 
