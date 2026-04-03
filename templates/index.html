@@ -55,8 +55,14 @@
         <!-- Sol Panel - Kaydedilen Pozisyonlar -->
         <div class="col-md-3">
           <div class="card sidebar-card">
-            <div class="card-header">
+            <div class="card-header d-flex align-items-center justify-content-between py-2 px-2">
               <h6 class="mb-0">Kaydedilen Pozisyonlar</h6>
+              <div class="d-flex gap-1">
+                <button class="btn btn-success btn-sm" onclick="newPosition()" title="Yeni Pozisyon">+ Yeni</button>
+                <form method="POST" action="/refresh_all" class="m-0">
+                  <button class="btn btn-outline-secondary btn-sm" type="submit" title="Tüm açık pozisyonları yenile">↻</button>
+                </form>
+              </div>
             </div>
             <div class="card-body p-2">
               <div class="saved-positions">
@@ -74,25 +80,25 @@
                             <span class="badge bg-success" style="font-size:0.65rem;">Açık</span>
                           {% endif %}
                           {% if position.get('amount') %}
-                            <span class="badge bg-light text-dark border" style="font-size:0.65rem;">${{ "%.0f"|format(position.amount) }}</span>
+                            <span class="badge bg-light text-dark border" style="font-size:0.65rem;">${{ position.amount | trf(0) }}</span>
                           {% endif %}
                         </div>
                         <div class="position-meta">
-                          Giriş: {{ "%.4f"|format(position.entry_price) }}<br>
-                          Hedef: {{ "%.4f"|format(position.target_price1) }}
-                          {% if position.target_price2 %} / {{ "%.4f"|format(position.target_price2) }}{% endif %}<br>
-                          Stop: {{ "%.4f"|format(position.stop_price) }}<br>
+                          Giriş: {{ position.entry_price | trf }}<br>
+                          Hedef: {{ position.target_price1 | trf }}
+                          {% if position.target_price2 %} / {{ position.target_price2 | trf }}{% endif %}<br>
+                          Stop: {{ position.stop_price | trf }}<br>
                           {% if is_closed %}
                             {% set reason = position.get('close_reason', '') %}
                             {% set reason_label = close_reason_labels.get(reason, reason) %}
                             <span class="text-danger fw-semibold">
-                              {{ reason_label }} @ {{ "%.4f"|format(position.close_price) }}
+                              {{ reason_label }} @ {{ position.close_price | trf }}
                             </span><br>
                             {% if position.get('pnl_percent') is not none %}
                               <span class="{{ 'text-success' if position.pnl_percent >= 0 else 'text-danger' }}">
-                                %{{ "%.2f"|format(position.pnl_percent) }}
+                                %{{ position.pnl_percent | trf(2) }}
                                 {% if position.get('pnl_dollar') is not none %}
-                                  | {{ '+' if position.pnl_dollar >= 0 else '' }}${{ "%.2f"|format(position.pnl_dollar) }}
+                                  | {{ '+' if position.pnl_dollar >= 0 else '' }}${{ position.pnl_dollar | trf(2) }}
                                 {% endif %}
                               </span><br>
                             {% endif %}
@@ -259,6 +265,16 @@
         document.getElementById('closePositionForm').action = '/close_position/' + positionId;
         document.getElementById('closePrice').value = '';
         new bootstrap.Modal(document.getElementById('closePositionModal')).show();
+      }
+
+      function newPosition() {
+        const form = document.querySelector('form[method=post]');
+        ['coin','entry_price','target_price1','target_price2','stop_price','leverage','open_date','amount'].forEach(name => {
+          form.querySelector('[name=' + name + ']').value = '';
+        });
+        form.querySelector('[name=position_id]').value = '';
+        document.querySelectorAll('.position-item').forEach(el => el.classList.remove('active'));
+        form.scrollIntoView({behavior: 'smooth'});
       }
     </script>
   </body>
