@@ -145,7 +145,7 @@
           <div class="alert alert-success">{{ success_message }}</div>
           {% endif %}
 
-          <form method="post" class="card p-3 mb-4">
+          <form id="mainForm" method="post" class="card p-3 mb-4">
             <input type="hidden" name="position_id" value="{{ form.position_id }}" />
             <div class="row g-3">
               <div class="col-md-4">
@@ -268,12 +268,12 @@
       }
 
       function newPosition() {
-        const form = document.querySelector('form[method=post]');
-        ['coin','entry_price','target_price1','target_price2','stop_price','leverage','open_date','amount'].forEach(name => {
-          form.querySelector('[name=' + name + ']').value = '';
+        var form = document.getElementById('mainForm');
+        ['coin','entry_price','target_price1','target_price2','stop_price','leverage','open_date','amount','position_id'].forEach(function(name) {
+          var el = form.querySelector('[name="' + name + '"]');
+          if (el) el.value = '';
         });
-        form.querySelector('[name=position_id]').value = '';
-        document.querySelectorAll('.position-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.position-item').forEach(function(el) { el.classList.remove('active'); });
         form.scrollIntoView({behavior: 'smooth'});
       }
     </script>
