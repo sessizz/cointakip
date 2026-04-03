@@ -35,8 +35,12 @@
         background: #d1ecf1;
         border-color: #17a2b8;
       }
+      .position-item.closed {
+        background: #f1f1f1;
+        opacity: 0.85;
+      }
       .position-meta {
-        font-size: 0.875rem;
+        font-size: 0.8rem;
         color: #6c757d;
       }
       .delete-btn {
@@ -58,23 +62,58 @@
               <div class="saved-positions">
                 {% if saved_positions %}
                   {% for position in saved_positions %}
-                  <div class="position-item" onclick="loadPosition({{ position.id }})">
+                  {% set is_closed = position.get('status') == 'closed' %}
+                  <div class="position-item {% if is_closed %}closed{% endif %}" onclick="loadPosition({{ position.id }})">
                     <div class="d-flex justify-content-between align-items-start">
                       <div class="flex-grow-1">
-                        <div class="fw-bold">{{ position.coin }}</div>
+                        <div class="d-flex align-items-center gap-1 mb-1">
+                          <span class="fw-bold">{{ position.coin }}</span>
+                          {% if is_closed %}
+                            <span class="badge bg-secondary" style="font-size:0.65rem;">Kapalı</span>
+                          {% else %}
+                            <span class="badge bg-success" style="font-size:0.65rem;">Açık</span>
+                          {% endif %}
+                          {% if position.get('amount') %}
+                            <span class="badge bg-light text-dark border" style="font-size:0.65rem;">${{ "%.0f"|format(position.amount) }}</span>
+                          {% endif %}
+                        </div>
                         <div class="position-meta">
-                          Giriş: {{ "%.2f"|format(position.entry_price) }}<br>
-                          Hedef: {{ "%.2f"|format(position.target_price1) }}
-                          {% if position.target_price2 %} / {{ "%.2f"|format(position.target_price2) }}{% endif %}<br>
-                          Stop: {{ "%.2f"|format(position.stop_price) }}<br>
+                          Giriş: {{ "%.4f"|format(position.entry_price) }}<br>
+                          Hedef: {{ "%.4f"|format(position.target_price1) }}
+                          {% if position.target_price2 %} / {{ "%.4f"|format(position.target_price2) }}{% endif %}<br>
+                          Stop: {{ "%.4f"|format(position.stop_price) }}<br>
+                          {% if is_closed %}
+                            {% set reason = position.get('close_reason', '') %}
+                            {% set reason_label = close_reason_labels.get(reason, reason) %}
+                            <span class="text-danger fw-semibold">
+                              {{ reason_label }} @ {{ "%.4f"|format(position.close_price) }}
+                            </span><br>
+                            {% if position.get('pnl_percent') is not none %}
+                              <span class="{{ 'text-success' if position.pnl_percent >= 0 else 'text-danger' }}">
+                                %{{ "%.2f"|format(position.pnl_percent) }}
+                                {% if position.get('pnl_dollar') is not none %}
+                                  | {{ '+' if position.pnl_dollar >= 0 else '' }}${{ "%.2f"|format(position.pnl_dollar) }}
+                                {% endif %}
+                              </span><br>
+                            {% endif %}
+                          {% endif %}
                           <small class="text-muted">{{ position.saved_at }}</small>
                         </div>
                       </div>
-                      <button type="button" class="btn btn-outline-danger btn-sm delete-btn" 
-                              onclick="event.stopPropagation(); deletePosition({{ position.id }})"
-                              title="Sil">
-                        ×
-                      </button>
+                      <div class="d-flex flex-column gap-1 ms-1">
+                        {% if not is_closed %}
+                        <button type="button" class="btn btn-outline-warning btn-sm delete-btn"
+                                onclick="event.stopPropagation(); openCloseModal({{ position.id }})"
+                                title="Kapat">
+                          ✕
+                        </button>
+                        {% endif %}
+                        <button type="button" class="btn btn-outline-danger btn-sm delete-btn"
+                                onclick="event.stopPropagation(); deletePosition({{ position.id }})"
+                                title="Sil">
+                          🗑
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {% endfor %}
@@ -101,6 +140,7 @@
           {% endif %}
 
           <form method="post" class="card p-3 mb-4">
+            <input type="hidden" name="position_id" value="{{ form.position_id }}" />
             <div class="row g-3">
               <div class="col-md-4">
                 <label class="form-label">Coin</label>
@@ -109,6 +149,10 @@
               <div class="col-md-4">
                 <label class="form-label">Alış Fiyatı</label>
                 <input class="form-control" name="entry_price" value="{{ form.entry_price }}" />
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Miktar ($)</label>
+                <input class="form-control" name="amount" value="{{ form.amount }}" placeholder="Opsiyonel" />
               </div>
               <div class="col-md-4">
                 <label class="form-label">Hedef 1</label>
@@ -126,7 +170,7 @@
                 <label class="form-label">Kaldıraç</label>
                 <input class="form-control" name="leverage" value="{{ form.leverage }}" />
               </div>
-              <div class="col-md-12">
+              <div class="col-md-8">
                 <label class="form-label">Açılış Tarihi (YYYY-MM-DD HH:MM - Türkiye)</label>
                 <input class="form-control" name="open_date" value="{{ form.open_date }}" />
               </div>
@@ -139,7 +183,7 @@
 
           {% if live_status %}
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="fw-bold" style="color: {{ live_status.color }};">{{ live_status.text }}</div>
+            <div class="fw-bold fs-5" style="color: {{ live_status.color }};">{{ live_status.text }}</div>
           </div>
           {% endif %}
 
@@ -159,30 +203,62 @@
       </div>
     </div>
 
+    <!-- Modal: Pozisyon Kapat -->
+    <div class="modal fade" id="closePositionModal" tabindex="-1">
+      <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title">Pozisyonu Kapat</h6>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form method="POST" id="closePositionForm">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Kapanış Fiyatı</label>
+                <input class="form-control form-control-sm" name="close_price" id="closePrice" placeholder="Boş bırakın = anlık fiyat" />
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Kapatma Nedeni</label>
+                <select class="form-select form-select-sm" name="close_reason">
+                  <option value="kar">Kar Aldım</option>
+                  <option value="stop_manuel">Stop Yaptım</option>
+                  <option value="diger">Diğer</option>
+                </select>
+              </div>
+            </div>
+            <div class="modal-footer py-2">
+              <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+              <button type="submit" class="btn btn-warning btn-sm">Kapat</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       function loadPosition(positionId) {
-        // Remove active class from all items
         document.querySelectorAll('.position-item').forEach(item => {
           item.classList.remove('active');
         });
-        
-        // Add active class to clicked item
         event.currentTarget.classList.add('active');
-        
-        // Redirect to load the position
         window.location.href = '/?load=' + positionId;
       }
 
       function deletePosition(positionId) {
         if (confirm('Bu pozisyonu silmek istediğinizden emin misiniz?')) {
-          // Create a form and submit it
           const form = document.createElement('form');
           form.method = 'POST';
           form.action = '/delete_position/' + positionId;
           document.body.appendChild(form);
           form.submit();
         }
+      }
+
+      function openCloseModal(positionId) {
+        document.getElementById('closePositionForm').action = '/close_position/' + positionId;
+        document.getElementById('closePrice').value = '';
+        new bootstrap.Modal(document.getElementById('closePositionModal')).show();
       }
     </script>
   </body>
