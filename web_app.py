@@ -98,14 +98,14 @@ def update_position_close(position_id, close_price, close_reason, pnl_percent, p
 
 
 def get_current_price(symbol):
-    url = 'https://api.binance.com/api/v3/ticker/price'
+    url = 'https://fapi.binance.com/fapi/v1/ticker/price'
     resp = requests.get(url, params={'symbol': symbol}, timeout=10)
     resp.raise_for_status()
     return float(resp.json()['price'])
 
 
 def get_binance_klines(symbol: str, start_time: datetime, end_time: datetime):
-    url = 'https://api.binance.com/api/v3/klines'
+    url = 'https://fapi.binance.com/fapi/v1/klines'
     params = {
         'symbol': symbol,
         'interval': '1m',
