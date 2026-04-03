@@ -106,43 +106,50 @@ def get_current_price(symbol):
 
 def get_binance_klines(symbol: str, start_time: datetime, end_time: datetime):
     url = 'https://fapi.binance.com/fapi/v1/klines'
-    params = {
-        'symbol': symbol,
-        'interval': '1m',
-        'startTime': int(start_time.timestamp() * 1000),
-        'endTime': int(end_time.timestamp() * 1000),
-        'limit': 1000,
-    }
-    print('[DEBUG] Binance Klines Request:')
-    print(f"  URL: {url}")
-    print(f"  Params: symbol={params['symbol']}, interval={params['interval']}, startTime={params['startTime']}, endTime={params['endTime']}, limit={params['limit']}")
+    all_klines = []
+    current_start = int(start_time.timestamp() * 1000)
+    end_ms = int(end_time.timestamp() * 1000)
+    page = 0
 
-    resp = requests.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    klines = resp.json()
-    if not klines:
+    while True:
+        params = {
+            'symbol': symbol,
+            'interval': '1m',
+            'startTime': current_start,
+            'endTime': end_ms,
+            'limit': 1000,
+        }
+        page += 1
+        print(f'[DEBUG] Binance Klines Request (sayfa {page}): symbol={symbol}, startTime={current_start}, endTime={end_ms}')
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        klines = resp.json()
+        if not klines:
+            break
+        all_klines.extend(klines)
+        print(f'[DEBUG] Sayfa {page}: {len(klines)} kayıt (toplam: {len(all_klines)})')
+        if len(klines) < 1000:
+            break
+        # Bir sonraki batch: son mumun açılış zamanı + 1 dakika
+        current_start = int(klines[-1][0]) + 60000
+        if current_start >= end_ms:
+            break
+
+    if not all_klines:
         raise RuntimeError('Veri bulunamadı')
 
-    try:
-        total = len(klines)
-        print(f"[DEBUG] Binance Klines Response: {total} kayıt")
-        preview_first = klines[:3]
-        preview_last = klines[-3:] if total >= 3 else []
-        def fmt(k):
-            t = datetime.fromtimestamp(int(k[0]) / 1000, tz=timezone.utc).astimezone(LOCAL_TZ)
-            return f"{t.strftime('%Y-%m-%d %H:%M:%S')} | O:{float(k[1]):.4f} H:{float(k[2]):.4f} L:{float(k[3]):.4f} C:{float(k[4]):.4f}"
-        if preview_first:
-            print('[DEBUG] İlk 3 kline:')
-            for k in preview_first:
-                print('  ', fmt(k))
-        if preview_last:
-            print('[DEBUG] Son 3 kline:')
-            for k in preview_last:
-                print('  ', fmt(k))
-    except Exception as e:
-        print('[DEBUG] Yanıt önizleme yazdırılırken hata:', e)
+    def fmt(k):
+        t = datetime.fromtimestamp(int(k[0]) / 1000, tz=timezone.utc).astimezone(LOCAL_TZ)
+        return f"{t.strftime('%Y-%m-%d %H:%M:%S')} | O:{float(k[1]):.4f} H:{float(k[2]):.4f} L:{float(k[3]):.4f} C:{float(k[4]):.4f}"
+    print(f'[DEBUG] Toplam {len(all_klines)} kline çekildi.')
+    print('[DEBUG] İlk 3 kline:')
+    for k in all_klines[:3]:
+        print('  ', fmt(k))
+    print('[DEBUG] Son 3 kline:')
+    for k in all_klines[-3:]:
+        print('  ', fmt(k))
 
-    return klines
+    return all_klines
 
 
 def determine_position_type(entry_price: float, target1: float) -> str:
