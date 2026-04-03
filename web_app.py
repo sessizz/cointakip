@@ -40,6 +40,7 @@ def parse_float(s):
     return float(str(s).strip().replace(',', '.'))
 
 
+def load_settings():
     try:
         with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
