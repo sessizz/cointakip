@@ -395,12 +395,13 @@ def index():
                 eval_res = evaluate_position(klines, entry_price, target1, target2, stop_price, leverage, position_type, LOCAL_TZ)
 
                 last_close = eval_res['last_close']
-                live_pnl, live_status_text = calculate_profit_loss(entry_price, target1, stop_price, leverage, last_close, 'open', position_type)
+                current_price = get_current_price(coin)
+                live_pnl, live_status_text = calculate_profit_loss(entry_price, target1, stop_price, leverage, current_price, 'open', position_type)
                 live_color = 'green' if live_pnl > 0 else ('red' if live_pnl < 0 else 'black')
 
                 live_dollar = _dollar_str(amount, live_pnl)
                 context['live_status'] = {
-                    'text': f"Güncel: {live_status_text} %{live_pnl:.2f}{live_dollar} | Fiyat: {last_close:.2f}",
+                    'text': f"Güncel: {live_status_text} %{live_pnl:.2f}{live_dollar} | Fiyat: {current_price:.2f}",
                     'color': live_color,
                 }
 
