@@ -125,10 +125,23 @@ def add_position(position_data):
 
 
 def update_position(position_id, position_data):
+    if supabase:
+        try:
+            resp = supabase.table('saved_positions').select('*').eq('id', position_id).execute()
+            existing = resp.data[0] if resp.data else {}
+            position_data['saved_at'] = existing.get('saved_at', datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S'))
+            position_data['status'] = existing.get('status', 'open')
+            for key in ['close_price', 'close_time', 'close_reason', 'pnl_percent', 'pnl_dollar']:
+                if existing.get(key) is not None:
+                    position_data[key] = existing[key]
+            supabase.table('saved_positions').update(position_data).eq('id', position_id).execute()
+            return True
+        except Exception as e:
+            print(f'[ERROR] update_position: {e}')
+            return False
     positions = load_saved_positions()
     for i, p in enumerate(positions):
         if p.get('id') == position_id:
-            # Koru: id, saved_at, durum ve kapanış bilgileri
             position_data['id'] = p['id']
             position_data['saved_at'] = p.get('saved_at', datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S'))
             position_data['status'] = p.get('status', 'open')
@@ -610,15 +623,15 @@ def close_position_route(position_id):
 
     try:
         if close_price_str:
-            close_price = float(close_price_str)
+            close_price = parse_float(close_price_str)
         else:
             close_price = get_current_price(position['coin'])
 
-        entry_price = float(position['entry_price'])
-        target1 = float(position['target_price1'])
-        stop_price = float(position['stop_price'])
-        leverage = float(position['leverage'])
-        amount = float(position.get('amount') or 0)
+        entry_price = parse_float(position['entry_price'])
+        target1 = parse_float(position['target_price1'])
+        stop_price = parse_float(position['stop_price'])
+        leverage = parse_float(position['leverage'])
+        amount = parse_float(position.get('amount') or 0)
         position_type = determine_position_type(entry_price, target1)
 
         pnl_percent, _ = calculate_profit_loss(entry_price, target1, stop_price, leverage, close_price, 'open', position_type)
@@ -639,13 +652,13 @@ def refresh_all():
             continue
         try:
             coin = position['coin']
-            entry_price = float(position['entry_price'])
-            target1 = float(position['target_price1'])
+            entry_price = parse_float(position['entry_price'])
+            target1 = parse_float(position['target_price1'])
             target2_val = position.get('target_price2')
-            target2 = float(target2_val) if target2_val else None
-            stop_price = float(position['stop_price'])
-            leverage = float(position['leverage'])
-            amount = float(position.get('amount') or 0)
+            target2 = parse_float(target2_val) if target2_val else None
+            stop_price = parse_float(position['stop_price'])
+            leverage = parse_float(position['leverage'])
+            amount = parse_float(position.get('amount') or 0)
             open_date_str = position['open_date']
 
             naive = datetime.strptime(open_date_str, '%Y-%m-%d %H:%M')
