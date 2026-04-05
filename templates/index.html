@@ -310,14 +310,14 @@
         };
 
         var coin   = coinMatch ? coinMatch[1] : '';
-        var giris  = get('Giri[sş]');
+        var giris  = get('Giri[sş]') || get('Fiyat');
         var sl     = get('SL');
         var tp1    = get('TP1') || get('TP');
         var tp2    = get('TP2');
         var miktar = get('Miktar');
 
-        if (!coin || !giris || !sl || !tp1) {
-          errEl.textContent = 'Coin, Giriş, SL veya TP bulunamadı. Sinyal formatını kontrol edin.';
+        if (!coin || !giris) {
+          errEl.textContent = 'Coin veya Giriş/Fiyat bulunamadı. Sinyal formatını kontrol edin.';
           return;
         }
 
