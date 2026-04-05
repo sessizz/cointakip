@@ -1,11 +1,20 @@
 import io
 import json
+import os
 import base64
 from datetime import datetime, timezone
 
 import requests
 import pytz
 from flask import Flask, render_template, request, redirect, url_for, jsonify
+
+try:
+    from supabase import create_client
+    _SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+    _SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
+    supabase = create_client(_SUPABASE_URL, _SUPABASE_KEY) if _SUPABASE_URL and _SUPABASE_KEY else None
+except Exception:
+    supabase = None
 
 app = Flask(__name__)
 
@@ -41,19 +50,30 @@ def parse_float(s):
 
 
 def load_settings():
+    if supabase:
+        try:
+            resp = supabase.table('web_settings').select('key, value').execute()
+            return {row['key']: row['value'] for row in resp.data}
+        except Exception:
+            return {}
     try:
         with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
             if isinstance(data, dict):
                 return data
-    except FileNotFoundError:
-        return {}
     except Exception:
         return {}
     return {}
 
 
 def save_settings(data):
+    if supabase:
+        try:
+            rows = [{'key': k, 'value': str(v)} for k, v in data.items()]
+            supabase.table('web_settings').upsert(rows).execute()
+        except Exception:
+            pass
+        return
     try:
         with open(SETTINGS_PATH, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -62,13 +82,17 @@ def save_settings(data):
 
 
 def load_saved_positions():
+    if supabase:
+        try:
+            resp = supabase.table('saved_positions').select('*').order('id').execute()
+            return resp.data or []
+        except Exception:
+            return []
     try:
         with open(SAVED_POSITIONS_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
             if isinstance(data, list):
                 return data
-    except FileNotFoundError:
-        return []
     except Exception:
         return []
     return []
@@ -84,11 +108,18 @@ def save_positions(positions):
 
 
 def add_position(position_data):
-    positions = load_saved_positions()
     position_data['saved_at'] = datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
-    position_data['id'] = max((p.get('id', 0) for p in positions), default=0) + 1
     position_data.setdefault('status', 'open')
     position_data.setdefault('amount', 0)
+    if supabase:
+        try:
+            position_data.pop('id', None)
+            supabase.table('saved_positions').insert(position_data).execute()
+            return True
+        except Exception:
+            return False
+    positions = load_saved_positions()
+    position_data['id'] = max((p.get('id', 0) for p in positions), default=0) + 1
     positions.append(position_data)
     return save_positions(positions)
 
@@ -109,21 +140,36 @@ def update_position(position_id, position_data):
     return False
 
 def delete_position(position_id):
+    if supabase:
+        try:
+            supabase.table('saved_positions').delete().eq('id', position_id).execute()
+            return True
+        except Exception:
+            return False
     positions = load_saved_positions()
     positions = [p for p in positions if p.get('id') != position_id]
     return save_positions(positions)
 
 
 def update_position_close(position_id, close_price, close_reason, pnl_percent, pnl_dollar):
+    update_data = {
+        'status': 'closed',
+        'close_price': close_price,
+        'close_time': datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S'),
+        'close_reason': close_reason,
+        'pnl_percent': round(pnl_percent, 2),
+        'pnl_dollar': round(pnl_dollar, 2) if pnl_dollar is not None else None,
+    }
+    if supabase:
+        try:
+            supabase.table('saved_positions').update(update_data).eq('id', position_id).execute()
+            return True
+        except Exception:
+            return False
     positions = load_saved_positions()
     for p in positions:
         if p.get('id') == position_id:
-            p['status'] = 'closed'
-            p['close_price'] = close_price
-            p['close_time'] = datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S')
-            p['close_reason'] = close_reason
-            p['pnl_percent'] = round(pnl_percent, 2)
-            p['pnl_dollar'] = round(pnl_dollar, 2) if pnl_dollar is not None else None
+            p.update(update_data)
             break
     return save_positions(positions)
 

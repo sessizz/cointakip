@@ -1,9 +1,10 @@
 {
-  "coin": "AVAXUSDT",
-  "entry_price": "31.05",
-  "target_price1": "30.24",
-  "target_price2": "29.68",
-  "stop_price": "31.58",
-  "leverage": "20",
-  "open_date": "2025-09-25 07:55"
+  "coin": "1000XECUSDT",
+  "entry_price": "0.0068",
+  "target_price1": "0.007",
+  "target_price2": "",
+  "stop_price": "0.0065",
+  "leverage": "5.0",
+  "open_date": "2026-04-01 08:52",
+  "amount": "100.0"
 }
