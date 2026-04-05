@@ -183,7 +183,8 @@
             </div>
             <div class="mt-3">
               <button class="btn btn-primary me-2" type="submit" name="action" value="check">Kontrol Et</button>
-              <button class="btn btn-success" type="submit" name="action" value="save">Kaydet</button>
+              <button class="btn btn-success me-2" type="submit" name="action" value="save">Kaydet</button>
+              <button type="button" class="btn btn-outline-info" onclick="openSignalModal()">📋 Sinyal Yapıştır</button>
             </div>
           </form>
 
@@ -241,6 +242,27 @@
       </div>
     </div>
 
+    <!-- Modal: Sinyal Yapıştır -->
+    <div class="modal fade" id="signalModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header py-2">
+            <h6 class="modal-title">📋 Sinyal Yapıştır</h6>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <textarea id="signalText" class="form-control" rows="7"
+              placeholder="✅ ZEREBROUSDT — Pozisyon Açıldı&#10;Giriş : 0.007301 USDT&#10;SL    : 0.007228 USDT&#10;TP    : 0.007484 USDT&#10;Miktar: 5474.0"></textarea>
+            <div id="signalError" class="text-danger mt-1" style="font-size:0.85rem;"></div>
+          </div>
+          <div class="modal-footer py-2">
+            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+            <button type="button" class="btn btn-info btn-sm" onclick="applySignal()">Formu Doldur</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
       function loadPosition(positionId) {
@@ -265,6 +287,58 @@
         document.getElementById('closePositionForm').action = '/close_position/' + positionId;
         document.getElementById('closePrice').value = '';
         new bootstrap.Modal(document.getElementById('closePositionModal')).show();
+      }
+
+      function openSignalModal() {
+        document.getElementById('signalText').value = '';
+        document.getElementById('signalError').textContent = '';
+        new bootstrap.Modal(document.getElementById('signalModal')).show();
+      }
+
+      function applySignal() {
+        var text = document.getElementById('signalText').value;
+        var errEl = document.getElementById('signalError');
+        errEl.textContent = '';
+
+        // Coin: büyük harf/rakam dizisi, ardından — veya - geliyor
+        var coinMatch = text.match(/([A-Z0-9]{3,20})\s*[—–-]/);
+        // Sayısal alanlar
+        var get = function(label) {
+          var re = new RegExp(label + '\\s*:\\s*([\\d.,]+)', 'i');
+          var m = text.match(re);
+          return m ? m[1].replace(',', '.') : '';
+        };
+
+        var coin   = coinMatch ? coinMatch[1] : '';
+        var giris  = get('Giri[sş]');
+        var sl     = get('SL');
+        var tp1    = get('TP1') || get('TP');
+        var tp2    = get('TP2');
+        var miktar = get('Miktar');
+
+        if (!coin || !giris || !sl || !tp1) {
+          errEl.textContent = 'Coin, Giriş, SL veya TP bulunamadı. Sinyal formatını kontrol edin.';
+          return;
+        }
+
+        var form = document.getElementById('mainForm');
+        form.querySelector('[name="coin"]').value = coin;
+        form.querySelector('[name="entry_price"]').value = giris;
+        form.querySelector('[name="stop_price"]').value = sl;
+        form.querySelector('[name="target_price1"]').value = tp1;
+        form.querySelector('[name="target_price2"]').value = tp2;
+        if (miktar) form.querySelector('[name="amount"]').value = miktar;
+        form.querySelector('[name="position_id"]').value = '';
+
+        // Açılış tarihini şimdiki zamana ayarla
+        var now = new Date();
+        var pad = function(n) { return String(n).padStart(2, '0'); };
+        form.querySelector('[name="open_date"]').value =
+          now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate()) +
+          ' ' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+
+        bootstrap.Modal.getInstance(document.getElementById('signalModal')).hide();
+        form.scrollIntoView({behavior: 'smooth'});
       }
 
       function newPosition() {
