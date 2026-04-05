@@ -93,6 +93,21 @@ def add_position(position_data):
     return save_positions(positions)
 
 
+def update_position(position_id, position_data):
+    positions = load_saved_positions()
+    for i, p in enumerate(positions):
+        if p.get('id') == position_id:
+            # Koru: id, saved_at, durum ve kapanış bilgileri
+            position_data['id'] = p['id']
+            position_data['saved_at'] = p.get('saved_at', datetime.now(LOCAL_TZ).strftime('%Y-%m-%d %H:%M:%S'))
+            position_data['status'] = p.get('status', 'open')
+            for key in ['close_price', 'close_time', 'close_reason', 'pnl_percent', 'pnl_dollar']:
+                if key in p:
+                    position_data[key] = p[key]
+            positions[i] = position_data
+            return save_positions(positions)
+    return False
+
 def delete_position(position_id):
     positions = load_saved_positions()
     positions = [p for p in positions if p.get('id') != position_id]
@@ -401,11 +416,18 @@ def index():
                     'name': f"{coin} - {datetime.now(LOCAL_TZ).strftime('%m/%d %H:%M')}"
                 }
 
-                if add_position(position_data):
-                    context['success_message'] = f"{coin} pozisyonu başarıyla kaydedildi!"
-                    context['saved_positions'] = load_saved_positions()
+                if position_id_for_update:
+                    if update_position(position_id_for_update, position_data):
+                        context['success_message'] = f"{coin} pozisyonu güncellendi!"
+                        context['saved_positions'] = load_saved_positions()
+                    else:
+                        context['error'] = "Pozisyon güncellenirken bir hata oluştu."
                 else:
-                    context['error'] = "Pozisyon kaydetme sırasında bir hata oluştu."
+                    if add_position(position_data):
+                        context['success_message'] = f"{coin} pozisyonu kaydedildi!"
+                        context['saved_positions'] = load_saved_positions()
+                    else:
+                        context['error'] = "Pozisyon kaydedilirken bir hata oluştu."
 
             elif action == 'check':
                 naive = datetime.strptime(open_date_str, '%Y-%m-%d %H:%M')
