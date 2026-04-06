@@ -327,7 +327,8 @@
         form.querySelector('[name="stop_price"]').value = sl;
         form.querySelector('[name="target_price1"]').value = tp1;
         form.querySelector('[name="target_price2"]').value = tp2;
-        if (miktar) form.querySelector('[name="amount"]').value = miktar;
+        form.querySelector('[name="amount"]').value = miktar || '100';
+        form.querySelector('[name="leverage"]').value = '5';
         form.querySelector('[name="position_id"]').value = '';
 
         // Açılış tarihini şimdiki zamana ayarla
